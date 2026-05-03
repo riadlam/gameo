@@ -18,6 +18,7 @@ use App\Models\UserPlatform;
 use App\Services\UserProfilePhotoService;
 use App\Support\ApiPublicUrl;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
@@ -659,6 +660,12 @@ class AuthController extends BaseApiController
         /** @var User $user */
         $user = $request->user();
         $url = $validated['url'];
+
+        Log::info('profile_photo_remove_request', [
+            'user_id' => $user->id,
+            'url_length' => strlen($url),
+            'url_preview' => strlen($url) > 160 ? substr($url, 0, 160).'…' : $url,
+        ]);
 
         $slots = UserProfilePhotoService::slotsFromUser($user);
 

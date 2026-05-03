@@ -204,6 +204,11 @@ class UserProfilePhotoService
             return null;
         }
         $path = ltrim($path, '/');
+        // When the app lives under /public, API responses may use .../public/storage/...
+        // while the DB still has .../storage/... — both must map to the same disk path.
+        if (Str::startsWith($path, 'public/')) {
+            $path = Str::after($path, 'public/');
+        }
         if (Str::startsWith($path, 'storage/')) {
             return Str::after($path, 'storage/');
         }

@@ -1,0 +1,70 @@
+<?php
+
+$firebaseCredentialsPath = null;
+$firebaseCredentialsRaw = env('FIREBASE_CREDENTIALS');
+if (is_string($firebaseCredentialsRaw)) {
+    $trimmed = trim($firebaseCredentialsRaw, " \t\n\r\0\x0B'\"");
+    if ($trimmed !== '') {
+        if (is_file($trimmed)) {
+            $firebaseCredentialsPath = $trimmed;
+        } else {
+            $normalized = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $trimmed);
+            $fromBase = base_path($normalized);
+            if (is_file($fromBase)) {
+                $firebaseCredentialsPath = $fromBase;
+            }
+        }
+    }
+}
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Third Party Services
+    |--------------------------------------------------------------------------
+    |
+    | This file is for storing the credentials for third party services such
+    | as Mailgun, Postmark, AWS and more. This file provides the de facto
+    | location for this type of information, allowing packages to have
+    | a conventional file to locate the various service credentials.
+    |
+    */
+
+    'postmark' => [
+        'key' => env('POSTMARK_API_KEY'),
+    ],
+
+    'resend' => [
+        'key' => env('RESEND_API_KEY'),
+    ],
+
+    'ses' => [
+        'key' => env('AWS_ACCESS_KEY_ID'),
+        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+    ],
+
+    'slack' => [
+        'notifications' => [
+            'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
+            'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Firebase / Firestore (server → create match threads for Messages tab)
+    |--------------------------------------------------------------------------
+    |
+    | Download a service account JSON (Firebase Console → Project settings →
+    | Service accounts) with Cloud Datastore / Firestore access. Point
+    | FIREBASE_CREDENTIALS at the absolute path or a path under storage_path().
+    |
+    */
+    'firebase' => [
+        'project_id' => env('FIREBASE_PROJECT_ID', 'gamesahby'),
+        'credentials' => $firebaseCredentialsPath,
+    ],
+
+];

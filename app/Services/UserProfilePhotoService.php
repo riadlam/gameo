@@ -186,6 +186,17 @@ class UserProfilePhotoService
         }
     }
 
+    /**
+     * Deletes the underlying public-disk file only when it lives under this user's `profile_media` folder.
+     */
+    public static function deletePublicFileForUrlIfOwned(string $url, int $userId): void
+    {
+        if (! self::urlBelongsToUser($url, $userId)) {
+            return;
+        }
+        self::deletePublicFileForUrl($url);
+    }
+
     public static function publicDiskPathFromUrl(string $url): ?string
     {
         $path = parse_url($url, PHP_URL_PATH);
@@ -203,6 +214,21 @@ class UserProfilePhotoService
     public static function urlBelongsToUser(string $url, int $userId): bool
     {
         return str_contains($url, '/profile_media/'.$userId.'/');
+    }
+
+    /**
+     * Whether [candidate] refers to the same image as stored in a slot (exact string or same public file path).
+     */
+    public static function profileSlotContainsUrl(?string $slotUrl, string $candidate): bool
+    {
+        if (! is_string($slotUrl) || $slotUrl === '') {
+            return false;
+        }
+        if ($slotUrl === $candidate) {
+            return true;
+        }
+
+        return self::urlsPointToSamePublicFile($slotUrl, $candidate);
     }
 
     /**

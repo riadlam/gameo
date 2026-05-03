@@ -6,6 +6,7 @@ use App\Http\Requests\AuthLoginRequest;
 use App\Http\Requests\AuthFirebaseLoginRequest;
 use App\Http\Requests\AuthRegisterRequest;
 use App\Http\Resources\GameResource;
+use App\Models\Follower;
 use App\Models\Game;
 use App\Models\GamePlatform;
 use App\Models\GameRankTier;
@@ -393,7 +394,7 @@ class AuthController extends BaseApiController
     }
 
     /**
-     * Permanently delete the authenticated user and all related rows (DB cascades),
+     * Permanently delete the authenticated user and all related rows (explicit deletes + DB cascades),
      * revoke every Sanctum token, and remove uploaded profile media from the public disk.
      */
     public function destroyAccount(Request $request)
@@ -406,6 +407,13 @@ class AuthController extends BaseApiController
             $user->tokens()->delete();
 
             Storage::disk('public')->deleteDirectory('profile_media/'.$userId);
+
+            $user->gameRanks()->delete();
+            $user->userPlatforms()->delete();
+            Follower::query()
+                ->where('follower_id', $userId)
+                ->orWhere('following_id', $userId)
+                ->delete();
 
             $user->delete();
         });
@@ -652,16 +660,23 @@ class AuthController extends BaseApiController
         $user = $request->user();
         $url = $validated['url'];
 
-        if (! UserProfilePhotoService::urlBelongsToUser($url, $user->id)) {
+        $slots = UserProfilePhotoService::slotsFromUser($user);
+
+        $filled = 0;
+        foreach ($slots as $s) {
+            if (! empty($s['url'])) {
+                $filled++;
+            }
+        }
+        if ($filled <= 1) {
             throw ValidationException::withMessages([
-                'url' => ['This image cannot be removed from here.'],
+                'url' => ['You must keep at least one profile photo.'],
             ]);
         }
 
-        $slots = UserProfilePhotoService::slotsFromUser($user);
         $found = false;
         foreach ($slots as $i => $s) {
-            if (UserProfilePhotoService::urlsPointToSamePublicFile($s['url'] ?? null, $url)) {
+            if (UserProfilePhotoService::profileSlotContainsUrl($s['url'] ?? null, $url)) {
                 $slots[$i]['url'] = null;
                 $found = true;
                 break;
@@ -674,7 +689,7 @@ class AuthController extends BaseApiController
             ]);
         }
 
-        UserProfilePhotoService::deletePublicFileForUrl($url);
+        UserProfilePhotoService::deletePublicFileForUrlIfOwned($url, $user->id);
         $slots = UserProfilePhotoService::ensureSingleMain($slots);
         UserProfilePhotoService::saveSlotsToUser($user, $slots);
         $user->refresh();

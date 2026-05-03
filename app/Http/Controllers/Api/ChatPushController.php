@@ -7,21 +7,37 @@ use App\Services\FcmV1Sender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class ChatPushController extends BaseApiController
 {
     public function registerFcmToken(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'fcm_token' => ['required', 'string', 'min:32', 'max:8192'],
-        ]);
+        try {
+            $validated = $request->validate([
+                'fcm_token' => ['required', 'string', 'min:32', 'max:8192'],
+            ]);
+        } catch (ValidationException $e) {
+            Log::warning('fcm_token.register.validation_failed', [
+                'user_id' => $request->user()?->id,
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        }
 
         /** @var User $user */
         $user = $request->user();
+        $tokenLen = strlen($validated['fcm_token']);
         $user->forceFill([
             'fcm_token' => $validated['fcm_token'],
             'fcm_token_updated_at' => now(),
         ])->save();
+
+        Log::info('fcm_token.register.saved', [
+            'user_id' => $user->id,
+            'firebase_uid' => $user->firebase_uid,
+            'token_length' => $tokenLen,
+        ]);
 
         return $this->respondSuccess([], 'FCM token saved.');
     }

@@ -79,6 +79,13 @@ class AuthController extends BaseApiController
         $email = $validated['email'];
         $displayName = trim((string) ($validated['display_name'] ?? ''));
 
+        Log::info('auth.firebase_login.start', [
+            'firebase_uid' => $firebaseUid,
+            'email' => $email,
+            'has_display_name' => $displayName !== '',
+            'note' => 'fcm_token is stored via POST api/auth/fcm-token after the app saves the Sanctum bearer (not sent on firebase-login).',
+        ]);
+
         $user = User::query()
             ->where('firebase_uid', $firebaseUid)
             ->orWhere('email', $email)
@@ -116,6 +123,14 @@ class AuthController extends BaseApiController
         }
 
         $token = $user->createToken($validated['device_name'] ?? 'mobile')->plainTextToken;
+
+        $fresh = $user->fresh();
+        Log::info('auth.firebase_login.completed', [
+            'user_id' => $fresh?->id,
+            'is_new_user' => $isNewUser,
+            'firebase_uid' => $fresh?->firebase_uid,
+            'fcm_token_present' => filled($fresh?->fcm_token),
+        ]);
 
         return $this->respondSuccess([
             'data' => (new UserSummaryResource($this->userWithFollowCounts($user->fresh())))->resolve(),

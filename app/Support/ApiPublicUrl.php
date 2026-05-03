@@ -5,8 +5,8 @@ namespace App\Support;
 use Illuminate\Http\Request;
 
 /**
- * Rewrites absolute URLs under `/storage/` to use the current HTTP request host.
- * Fixes profile images when APP_URL (e.g. localhost) differs from the host the app uses (e.g. LAN IP).
+ * Rewrites absolute URLs under `/storage/` to use the current request origin.
+ * Uses the request base path when the app is served under a subdirectory (e.g. /public/).
  */
 final class ApiPublicUrl
 {
@@ -29,7 +29,13 @@ final class ApiPublicUrl
 
         $query = isset($parsed['query']) ? '?'.$parsed['query'] : '';
 
-        return rtrim($request->getSchemeAndHttpHost(), '/').$path.$query;
+        $origin = rtrim($request->getSchemeAndHttpHost(), '/');
+        $basePath = $request->getBasePath();
+        if (is_string($basePath) && $basePath !== '' && $basePath !== '/') {
+            $origin .= rtrim($basePath, '/');
+        }
+
+        return $origin.$path.$query;
     }
 
     /**

@@ -26,6 +26,8 @@ class User extends Authenticatable
         'email',
         'firebase_uid',
         'firebase_id_token',
+        'fcm_token',
+        'fcm_token_updated_at',
         'password',
         'gender',
         'birth_date',
@@ -47,6 +49,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'firebase_id_token',
+        'fcm_token',
     ];
 
     /**
@@ -63,6 +66,7 @@ class User extends Authenticatable
             'is_onboarding' => 'boolean',
             'is_online' => 'boolean',
             'last_seen' => 'datetime',
+            'fcm_token_updated_at' => 'datetime',
         ];
     }
 

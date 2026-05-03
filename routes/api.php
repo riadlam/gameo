@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ChatPushController;
 use App\Http\Controllers\Api\FollowerController;
 use App\Http\Controllers\Api\FriendController;
 use App\Http\Controllers\Api\FriendshipController;
@@ -49,6 +50,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('auth/profile-photo/main', [AuthController::class, 'setProfilePhotoMain']);
     Route::post('auth/onboarding-complete', [AuthController::class, 'markOnboardingComplete']);
     Route::post('auth/sync-gaming', [AuthController::class, 'syncGamingLibrary']);
+    Route::post('auth/fcm-token', [ChatPushController::class, 'registerFcmToken']);
+    Route::post('chat/notify-peer', [ChatPushController::class, 'notifyPeer']);
 
     Route::apiResource('game-platforms', GamePlatformController::class)->except(['index', 'show']);
     Route::post('platforms', [PlatformController::class, 'store']);

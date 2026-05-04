@@ -140,4 +140,96 @@ class ChatPushController extends BaseApiController
             'fcm_status' => $result['status'],
         ], $result['ok'] ? 'Push sent.' : 'Push could not be sent (check server logs / FCM config).');
     }
+
+    /**
+     * Called by the Flutter app after [POST api/matches] returns `matched`, mirroring [notifyPeer].
+     * Sends `match_found` FCM to the peer using `users.fcm_token`.
+     */
+    public function notifyMatchPeer(Request $request, FcmV1Sender $fcm): JsonResponse
+    {
+        $validated = $request->validate([
+            'recipient_firebase_uid' => ['required', 'string', 'max:128'],
+            'sender_firebase_uid' => ['required', 'string', 'max:128'],
+            'peer_username' => ['nullable', 'string', 'max:255'],
+            'peer_image_url' => ['nullable', 'string', 'max:2048'],
+            'game_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        /** @var User $sender */
+        $sender = $request->user();
+
+        if ($sender->firebase_uid === null || $sender->firebase_uid === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account has no firebase_uid; cannot verify sender.',
+            ], 422);
+        }
+
+        if ($sender->firebase_uid !== $validated['sender_firebase_uid']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'sender_firebase_uid does not match the authenticated user.',
+            ], 403);
+        }
+
+        if ($sender->firebase_uid === $validated['recipient_firebase_uid']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot notify yourself.',
+            ], 422);
+        }
+
+        $recipient = User::query()
+            ->where('firebase_uid', $validated['recipient_firebase_uid'])
+            ->first();
+
+        if ($recipient === null) {
+            return $this->respondSuccess([
+                'sent' => false,
+                'reason' => 'recipient_not_found',
+            ], 'Recipient is not registered on this backend.');
+        }
+
+        $token = $recipient->fcm_token;
+        if (! is_string($token) || strlen($token) < 32) {
+            return $this->respondSuccess([
+                'sent' => false,
+                'reason' => 'recipient_has_no_fcm_token',
+            ], 'Recipient has not registered an FCM token yet.');
+        }
+
+        $game = isset($validated['game_name']) ? trim((string) $validated['game_name']) : '';
+        $title = 'Found a new teammate';
+        $description = $game !== ''
+            ? "Gameo found you a new {$game} teammate."
+            : 'Gameo found you a new teammate.';
+
+        $peerUsername = isset($validated['peer_username']) ? trim((string) $validated['peer_username']) : '';
+        $peerImageUrl = isset($validated['peer_image_url']) ? trim((string) $validated['peer_image_url']) : '';
+
+        $data = [
+            'type' => 'match_found',
+            'title' => $title,
+            'description' => $description,
+            'body' => $description,
+            'peerUsername' => $peerUsername,
+            'peerImageUrl' => $peerImageUrl,
+            'gameName' => $game,
+        ];
+
+        $result = $fcm->sendToDevice($token, $title, $description, $data, 'gameo_matches');
+
+        if (! $result['ok'] && $fcm->responseIndicatesInvalidToken($result['body'])) {
+            $recipient->forceFill([
+                'fcm_token' => null,
+                'fcm_token_updated_at' => null,
+            ])->save();
+            Log::info('FCM: cleared stale token for user (match).', ['user_id' => $recipient->id]);
+        }
+
+        return $this->respondSuccess([
+            'sent' => $result['ok'],
+            'fcm_status' => $result['status'],
+        ], $result['ok'] ? 'Match push sent.' : 'Match push could not be sent (check server logs / FCM config).');
+    }
 }

@@ -130,6 +130,7 @@ final class MatchFirestoreConversationService
                 userB: $userB,
                 gameName: $gameName,
                 matchId: (int) $match->id,
+                request: $request,
             );
             Log::info('MatchFirestoreConversation: chat document created.', [
                 'chat_doc_id' => $chatDocId,
@@ -164,6 +165,7 @@ final class MatchFirestoreConversationService
                 userB: $userB,
                 gameName: $gameName,
                 matchId: (int) $match->id,
+                request: $request,
             );
 
             return;
@@ -285,8 +287,8 @@ final class MatchFirestoreConversationService
     }
 
     /**
-     * In-app notification rows for both players (Games tab).
-     * Device push (FCM) is not wired yet — would need stored device tokens + FCM send.
+     * In-app Firestore `notifications` rows for both players (Games tab).
+     * Device push is sent by the app via [POST api/chat/notify-match-peer], same pattern as chat.
      */
     private function createMatchNotifications(
         string $projectId,
@@ -295,6 +297,7 @@ final class MatchFirestoreConversationService
         User $userB,
         string $gameName,
         int $matchId,
+        ?Request $request = null,
     ): void {
         $trimmedGame = trim($gameName);
         $title = 'Found a new teammate';
@@ -307,18 +310,28 @@ final class MatchFirestoreConversationService
             rawurlencode($projectId),
         );
 
-        $recipientUids = array_values(array_unique(array_filter([
-            trim((string) ($userA->firebase_uid ?? '')),
-            trim((string) ($userB->firebase_uid ?? '')),
-        ], static fn (string $uid): bool => $uid !== '')));
+        $pairs = [
+            [$userA, $userB],
+            [$userB, $userA],
+        ];
 
-        foreach ($recipientUids as $uid) {
+        foreach ($pairs as [$recipient, $peer]) {
+            $uid = trim((string) ($recipient->firebase_uid ?? ''));
+            if ($uid === '') {
+                continue;
+            }
+
+            $peerUsername = (string) ($peer->username ?? 'Player');
+            $peerImageUrl = $this->peerImageUrlForFirestore($peer, $request);
+
             $fields = [
                 'recipientUid' => ['stringValue' => $uid],
                 'type' => ['stringValue' => 'match_found'],
                 'title' => ['stringValue' => $title],
                 'description' => ['stringValue' => $description],
                 'gameName' => ['stringValue' => $trimmedGame],
+                'peerUsername' => ['stringValue' => $peerUsername],
+                'peerImageUrl' => ['stringValue' => $peerImageUrl],
                 'matchId' => ['integerValue' => (string) $matchId],
                 'isRead' => ['booleanValue' => false],
                 'createdAt' => ['timestampValue' => Carbon::now()->utc()->toIso8601String()],
@@ -344,5 +357,14 @@ final class MatchFirestoreConversationService
                 ]);
             }
         }
+    }
+
+    private function peerImageUrlForFirestore(User $user, ?Request $request): string
+    {
+        $slots = UserProfilePhotoService::slotsFromUser($user);
+        $main = UserProfilePhotoService::mainUrl($slots) ?? $user->first_cover ?? $user->avatar;
+        $url = is_string($main) ? ApiPublicUrl::rewrite($main, $request) : null;
+
+        return is_string($url) ? $url : '';
     }
 }

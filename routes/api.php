@@ -52,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('auth/sync-gaming', [AuthController::class, 'syncGamingLibrary']);
     Route::post('auth/fcm-token', [ChatPushController::class, 'registerFcmToken']);
     Route::post('chat/notify-peer', [ChatPushController::class, 'notifyPeer']);
+    Route::post('chat/notify-match-peer', [ChatPushController::class, 'notifyMatchPeer']);
 
     Route::apiResource('game-platforms', GamePlatformController::class)->except(['index', 'show']);
     Route::post('platforms', [PlatformController::class, 'store']);

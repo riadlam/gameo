@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\User;
 use App\Services\FcmV1Sender;
+use App\Support\MatchNotificationCopy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -200,10 +201,8 @@ class ChatPushController extends BaseApiController
         }
 
         $game = isset($validated['game_name']) ? trim((string) $validated['game_name']) : '';
-        $title = 'Found a new teammate';
-        $description = $game !== ''
-            ? "Gameo found you a new {$game} teammate."
-            : 'Gameo found you a new teammate.';
+        $title = MatchNotificationCopy::title();
+        $description = MatchNotificationCopy::description($game);
 
         $peerUsername = isset($validated['peer_username']) ? trim((string) $validated['peer_username']) : '';
         $peerImageUrl = isset($validated['peer_image_url']) ? trim((string) $validated['peer_image_url']) : '';

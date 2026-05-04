@@ -190,7 +190,11 @@ class MatchController extends BaseApiController
         }
 
         return $this->respondResource(
-            new MatchResource($match),
+            new MatchResource($match->load([
+                'gamePlatform.game:id,name',
+                'user:id,username,avatar,first_cover,profile_images',
+                'targetUser:id,username,avatar,first_cover,profile_images',
+            ])),
             'Match updated successfully.'
         );
     }

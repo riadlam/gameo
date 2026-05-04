@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\MatchModel;
 use App\Models\User;
 use App\Support\ApiPublicUrl;
+use App\Support\MatchNotificationCopy;
 use Carbon\Carbon;
 use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Http\Request;
@@ -105,9 +106,7 @@ final class MatchFirestoreConversationService
         $match->loadMissing(['gamePlatform.game:id,name']);
         $gameName = $match->gamePlatform?->game?->name;
         $gameName = is_string($gameName) ? trim($gameName) : '';
-        $lastText = $gameName !== ''
-            ? "It's a match on {$gameName}! Say hi."
-            : "It's a match! Say hi.";
+        $lastText = MatchNotificationCopy::description($gameName);
 
         $profilesPayload = [
             $uidA => $this->profileRow($userA, $request),
@@ -361,10 +360,8 @@ final class MatchFirestoreConversationService
         }
 
         $game = trim($gameName);
-        $title = 'Found a new teammate';
-        $description = $game !== ''
-            ? "Gameo found you a new {$game} teammate."
-            : 'Gameo found you a new teammate.';
+        $title = MatchNotificationCopy::title();
+        $description = MatchNotificationCopy::description($game);
 
         $peerUsername = (string) ($actor->username ?? 'Player');
         $peerImageUrl = $this->peerImageUrlForFirestore($actor, $request);
@@ -415,10 +412,8 @@ final class MatchFirestoreConversationService
         ?Request $request = null,
     ): void {
         $trimmedGame = trim($gameName);
-        $title = 'Found a new teammate';
-        $description = $trimmedGame !== ''
-            ? "Gameo found you a new {$trimmedGame} teammate."
-            : 'Gameo found you a new teammate.';
+        $title = MatchNotificationCopy::title();
+        $description = MatchNotificationCopy::description($trimmedGame);
 
         $url = sprintf(
             'https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents/notifications',

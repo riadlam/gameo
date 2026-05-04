@@ -153,6 +153,7 @@ class ChatPushController extends BaseApiController
             'peer_username' => ['nullable', 'string', 'max:255'],
             'peer_image_url' => ['nullable', 'string', 'max:2048'],
             'game_name' => ['nullable', 'string', 'max:255'],
+            'peer_app_user_id' => ['nullable', 'integer', 'min:1'],
         ]);
 
         /** @var User $sender */
@@ -206,6 +207,7 @@ class ChatPushController extends BaseApiController
 
         $peerUsername = isset($validated['peer_username']) ? trim((string) $validated['peer_username']) : '';
         $peerImageUrl = isset($validated['peer_image_url']) ? trim((string) $validated['peer_image_url']) : '';
+        $peerAppUserId = isset($validated['peer_app_user_id']) ? (int) $validated['peer_app_user_id'] : 0;
 
         $data = [
             'type' => 'match_found',
@@ -215,6 +217,8 @@ class ChatPushController extends BaseApiController
             'peerUsername' => $peerUsername,
             'peerImageUrl' => $peerImageUrl,
             'gameName' => $game,
+            'peerFirebaseUid' => (string) $validated['sender_firebase_uid'],
+            'peerAppUserId' => (string) max(0, $peerAppUserId),
         ];
 
         $result = $fcm->sendToDevice($token, $title, $description, $data, 'gameo_matches');

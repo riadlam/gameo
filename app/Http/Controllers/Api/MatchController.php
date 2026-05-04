@@ -141,8 +141,8 @@ class MatchController extends BaseApiController
 
         return $this->respondResource(
             new MatchResource($match->load([
-                'user:id,username,avatar,first_cover,profile_images',
-                'targetUser:id,username,avatar,first_cover,profile_images',
+                'user:id,username,firebase_uid,avatar,first_cover,profile_images',
+                'targetUser:id,username,firebase_uid,avatar,first_cover,profile_images',
                 'gamePlatform.game:id,name',
             ])),
             'Match updated successfully.'
@@ -159,7 +159,10 @@ class MatchController extends BaseApiController
             $this->ensureOwner((int) $match->user_id, $authUserId);
         }
         return $this->respondResource(
-            new MatchResource($match->load(['user:id,username', 'targetUser:id,username'])),
+            new MatchResource($match->load([
+                'user:id,username,firebase_uid',
+                'targetUser:id,username,firebase_uid',
+            ])),
             'Match fetched successfully.'
         );
     }
@@ -192,8 +195,8 @@ class MatchController extends BaseApiController
         return $this->respondResource(
             new MatchResource($match->load([
                 'gamePlatform.game:id,name',
-                'user:id,username,avatar,first_cover,profile_images',
-                'targetUser:id,username,avatar,first_cover,profile_images',
+                'user:id,username,firebase_uid,avatar,first_cover,profile_images',
+                'targetUser:id,username,firebase_uid,avatar,first_cover,profile_images',
             ])),
             'Match updated successfully.'
         );

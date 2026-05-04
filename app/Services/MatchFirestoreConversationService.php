@@ -25,12 +25,40 @@ final class MatchFirestoreConversationService
 {
     private const FIRESTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
 
+    public function __construct(
+        private readonly FcmV1Sender $fcm,
+    ) {}
+
     public function bootstrapFromMatch(MatchModel $match, ?Request $request = null): void
     {
         try {
             $this->bootstrapFromMatchUnchecked($match, $request);
         } catch (Throwable $e) {
             Log::error('MatchFirestoreConversation: failed.', [
+                'match_id' => $match->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send "it's a match" FCM to the peer (not the API caller). Safe to call even when Firestore
+     * chat bootstrap was skipped (e.g. missing service account).
+     */
+    public function notifyPeerDeviceOfMutualMatch(User $actor, MatchModel $match, ?Request $request = null): void
+    {
+        try {
+            $match->loadMissing(['gamePlatform.game:id,name']);
+            $gameName = $match->gamePlatform?->game?->name;
+            $gameName = is_string($gameName) ? trim($gameName) : '';
+            $userA = User::query()->find((int) $match->user_id);
+            $userB = User::query()->find((int) $match->target_user_id);
+            if (! $userA || ! $userB) {
+                return;
+            }
+            $this->sendMatchFoundFcmToPeerOtherThanActor($request, $actor, $userA, $userB, $gameName);
+        } catch (Throwable $e) {
+            Log::warning('MatchFCM: notifyPeerDeviceOfMutualMatch failed.', [
                 'match_id' => $match->id,
                 'message' => $e->getMessage(),
             ]);
@@ -287,8 +315,95 @@ final class MatchFirestoreConversationService
     }
 
     /**
+     * FCM to the **other** player when the authenticated user’s swipe completes a mutual match
+     * (same payload shape as [ChatPushController::notifyMatchPeer], using [users.fcm_token]).
+     */
+    private function sendMatchFoundFcmToPeerOtherThanActor(
+        ?Request $request,
+        ?User $actor,
+        User $userA,
+        User $userB,
+        string $gameName,
+    ): void {
+        if (! $actor instanceof User) {
+            return;
+        }
+
+        $authId = (int) $actor->id;
+        $recipient = (int) $userA->id === $authId ? $userB : $userA;
+        if ((int) $recipient->id === $authId) {
+            return;
+        }
+
+        $recipientFresh = User::query()->find((int) $recipient->id);
+        if (! $recipientFresh instanceof User) {
+            return;
+        }
+        $recipient = $recipientFresh;
+
+        $deviceToken = $recipient->fcm_token;
+        if (! is_string($deviceToken) || strlen($deviceToken) < 32) {
+            Log::info('MatchFCM: peer has no FCM token on users row.', [
+                'recipient_user_id' => $recipient->id,
+                'match_actor_id' => $authId,
+            ]);
+
+            return;
+        }
+
+        $peerFirebaseUid = trim((string) ($actor->firebase_uid ?? ''));
+        if ($peerFirebaseUid === '') {
+            Log::warning('MatchFCM: actor has no firebase_uid; cannot build tap payload.', [
+                'actor_user_id' => $authId,
+            ]);
+
+            return;
+        }
+
+        $game = trim($gameName);
+        $title = 'Found a new teammate';
+        $description = $game !== ''
+            ? "Gameo found you a new {$game} teammate."
+            : 'Gameo found you a new teammate.';
+
+        $peerUsername = (string) ($actor->username ?? 'Player');
+        $peerImageUrl = $this->peerImageUrlForFirestore($actor, $request);
+
+        $data = [
+            'type' => 'match_found',
+            'title' => $title,
+            'description' => $description,
+            'body' => $description,
+            'peerUsername' => $peerUsername,
+            'peerImageUrl' => $peerImageUrl,
+            'gameName' => $game,
+            'peerFirebaseUid' => $peerFirebaseUid,
+            'peerAppUserId' => (string) $authId,
+        ];
+
+        $result = $this->fcm->sendToDevice($deviceToken, $title, $description, $data, 'gameo_matches');
+
+        if (! $result['ok'] && $this->fcm->responseIndicatesInvalidToken($result['body'])) {
+            $recipient->forceFill([
+                'fcm_token' => null,
+                'fcm_token_updated_at' => null,
+            ])->save();
+            Log::info('MatchFCM: cleared stale token.', ['user_id' => $recipient->id]);
+
+            return;
+        }
+
+        if (! $result['ok']) {
+            Log::warning('MatchFCM: send failed.', [
+                'recipient_user_id' => $recipient->id,
+                'status' => $result['status'],
+                'body' => $result['body'],
+            ]);
+        }
+    }
+
+    /**
      * In-app Firestore `notifications` rows for both players (Games tab).
-     * Device push is sent by the app via [POST api/chat/notify-match-peer], same pattern as chat.
      */
     private function createMatchNotifications(
         string $projectId,

@@ -134,6 +134,9 @@ class MatchController extends BaseApiController
         if ($becameMatched) {
             $this->ensureMutualFollowEdges($match);
             $this->matchFirestoreConversation->bootstrapFromMatch($match, $request);
+            /** @var User $auth */
+            $auth = $request->user();
+            $this->matchFirestoreConversation->notifyPeerDeviceOfMutualMatch($auth, $match, $request);
         }
 
         return $this->respondResource(
@@ -181,6 +184,9 @@ class MatchController extends BaseApiController
         if ($match->status === 'matched' && $previousStatus !== 'matched') {
             $this->ensureMutualFollowEdges($match);
             $this->matchFirestoreConversation->bootstrapFromMatch($match, $request);
+            /** @var User $auth */
+            $auth = $request->user();
+            $this->matchFirestoreConversation->notifyPeerDeviceOfMutualMatch($auth, $match, $request);
         }
 
         return $this->respondResource(

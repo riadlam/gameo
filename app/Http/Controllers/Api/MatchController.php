@@ -6,6 +6,7 @@ use App\Http\Resources\PaginatedResourceCollection;
 use App\Http\Requests\MatchCandidatesRequest;
 use App\Http\Requests\UpsertMatchRequest;
 use App\Http\Resources\MatchResource;
+use App\Http\Resources\UserSummaryResource;
 use App\Models\Game;
 use App\Services\MatchFirestoreConversationService;
 use App\Models\GamePlatform;

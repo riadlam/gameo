@@ -469,6 +469,143 @@ final class MatchFirestoreConversationService
         }
     }
 
+    /**
+     * Send "liked_you" Firestore notification + FCM push when someone swipes right on another user.
+     */
+    public function notifyPeerOfLike(User $actor, MatchModel $match, ?Request $request = null): void
+    {
+        try {
+            $recipient = User::query()->find((int) $match->target_user_id);
+            if (! $recipient instanceof User) {
+                return;
+            }
+
+            $actorFirebaseUid = trim((string) ($actor->firebase_uid ?? ''));
+            $recipientFirebaseUid = trim((string) ($recipient->firebase_uid ?? ''));
+            if ($actorFirebaseUid === '' || $recipientFirebaseUid === '') {
+                return;
+            }
+
+            $peerUsername = (string) ($actor->username ?? 'Player');
+            $peerImageUrl = $this->peerImageUrlForFirestore($actor, $request);
+
+            $this->createLikedYouFirestoreNotification(
+                recipientUid: $recipientFirebaseUid,
+                peerUsername: $peerUsername,
+                peerImageUrl: $peerImageUrl,
+                request: $request,
+            );
+
+            $this->sendLikedYouFcm(
+                actor: $actor,
+                recipient: $recipient,
+                peerUsername: $peerUsername,
+                peerImageUrl: $peerImageUrl,
+            );
+        } catch (Throwable $e) {
+            Log::warning('MatchFirestoreConversation: notifyPeerOfLike failed.', [
+                'match_id' => $match->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function createLikedYouFirestoreNotification(
+        string $recipientUid,
+        string $peerUsername,
+        string $peerImageUrl,
+        ?Request $request = null,
+    ): void {
+        $projectId = (string) config('services.firebase.project_id', '');
+        $credsPath = config('services.firebase.credentials');
+        if ($projectId === '' || ! is_string($credsPath) || $credsPath === '' || ! is_file($credsPath)) {
+            return;
+        }
+
+        $token = $this->accessToken($credsPath);
+        if ($token === null) {
+            return;
+        }
+
+        $url = sprintf(
+            'https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents/notifications',
+            rawurlencode($projectId),
+        );
+
+        $fields = [
+            'recipientUid' => ['stringValue' => $recipientUid],
+            'type' => ['stringValue' => 'liked_you'],
+            'title' => ['stringValue' => 'Someone liked you'],
+            'description' => ['stringValue' => "$peerUsername liked you."],
+            'peerUsername' => ['stringValue' => $peerUsername],
+            'peerImageUrl' => ['stringValue' => $peerImageUrl],
+            'isRead' => ['booleanValue' => false],
+            'createdAt' => ['timestampValue' => Carbon::now()->utc()->toIso8601String()],
+        ];
+
+        try {
+            $res = Http::withToken($token)
+                ->acceptJson()
+                ->post($url, ['fields' => $fields]);
+            if (! $res->successful()) {
+                Log::warning('MatchFirestoreConversation: liked_you notification create failed.', [
+                    'status' => $res->status(),
+                    'body' => $res->body(),
+                    'recipient_uid' => $recipientUid,
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('MatchFirestoreConversation: liked_you notification request exception.', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function sendLikedYouFcm(
+        User $actor,
+        User $recipient,
+        string $peerUsername,
+        string $peerImageUrl,
+    ): void {
+        $deviceToken = $recipient->fcm_token;
+        if (! is_string($deviceToken) || strlen($deviceToken) < 32) {
+            return;
+        }
+
+        $title = 'Someone liked you';
+        $description = "$peerUsername liked you.";
+        $actorFirebaseUid = trim((string) ($actor->firebase_uid ?? ''));
+
+        $data = [
+            'type' => 'liked_you',
+            'title' => $title,
+            'description' => $description,
+            'body' => $description,
+            'peerUsername' => $peerUsername,
+            'peerImageUrl' => $peerImageUrl,
+            'peerFirebaseUid' => $actorFirebaseUid,
+            'peerAppUserId' => (string) $actor->id,
+        ];
+
+        $result = $this->fcm->sendToDevice($deviceToken, $title, $description, $data, 'gameo_matches');
+
+        if (! $result['ok'] && $this->fcm->responseIndicatesInvalidToken($result['body'])) {
+            $recipient->forceFill([
+                'fcm_token' => null,
+                'fcm_token_updated_at' => null,
+            ])->save();
+            return;
+        }
+
+        if (! $result['ok']) {
+            Log::warning('LikeFCM: send failed.', [
+                'recipient_user_id' => $recipient->id,
+                'status' => $result['status'],
+                'body' => $result['body'],
+            ]);
+        }
+    }
+
     private function peerImageUrlForFirestore(User $user, ?Request $request): string
     {
         $slots = UserProfilePhotoService::slotsFromUser($user);

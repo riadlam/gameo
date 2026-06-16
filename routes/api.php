@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('user-game-stats', UserGameStatController::class);
     Route::apiResource('matches', MatchController::class);
     Route::get('matches-candidates', [MatchController::class, 'candidates']);
+    Route::get('likes/who-liked-me', [MatchController::class, 'whoLikedMe']);
     Route::get('friends', [FriendController::class, 'index']);
     Route::get('users/{user}', [UserPublicProfileController::class, 'show']);
     Route::get('followers/block-status/{otherUserId}', [FollowerController::class, 'blockStatus'])

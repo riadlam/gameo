@@ -13,6 +13,7 @@ use App\Models\MatchModel;
 use App\Models\Platform;
 use App\Models\User;
 use App\Services\UserProfilePhotoService;
+use App\Support\ApiPublicUrl;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -60,7 +61,7 @@ class MatchController extends BaseApiController
             ]);
         }
 
-        [$match, $becameMatched] = DB::transaction(function () use ($authUserId, $targetUserId, $gamePlatformId, $newStatus) {
+        [$match, $becameMatched, $isNewLike] = DB::transaction(function () use ($authUserId, $targetUserId, $gamePlatformId, $newStatus) {
             // One row per unordered pair + game_platform_id.
             $pairRows = MatchModel::query()
                 ->where('game_platform_id', $gamePlatformId)
@@ -87,7 +88,9 @@ class MatchController extends BaseApiController
                     'status' => $newStatus,
                 ]);
 
-                return [$created, (string) $created->status === 'matched'];
+                $isNewLike = (string) $created->status === 'liked';
+
+                return [$created, false, $isNewLike];
             }
 
             // Cleanup duplicates if they exist historically; keep oldest row only.
@@ -128,7 +131,7 @@ class MatchController extends BaseApiController
             $fresh = $existing->fresh();
             $becameMatched = $resolvedStatus === 'matched' && $currentStatus !== 'matched';
 
-            return [$fresh, $becameMatched];
+            return [$fresh, $becameMatched, false];
         });
 
         if ($becameMatched) {
@@ -137,6 +140,12 @@ class MatchController extends BaseApiController
             /** @var User $auth */
             $auth = $request->user();
             $this->matchFirestoreConversation->notifyPeerDeviceOfMutualMatch($auth, $match, $request);
+        }
+
+        if ($isNewLike) {
+            /** @var User $auth */
+            $auth = $request->user();
+            $this->matchFirestoreConversation->notifyPeerOfLike($auth, $match, $request);
         }
 
         return $this->respondResource(
@@ -228,6 +237,27 @@ class MatchController extends BaseApiController
         $this->ensureOwner((int) $match->user_id, (int) request()->user()->id);
         $match->delete();
         return $this->respondDeleted('Match deleted successfully.');
+    }
+
+    /**
+     * Users who liked the authenticated user (status = liked, target = me).
+     */
+    public function whoLikedMe(Request $request)
+    {
+        $authUserId = (int) $request->user()->id;
+
+        $likers = User::query()
+            ->whereIn('id', function ($q) use ($authUserId) {
+                $q->select('user_id')
+                    ->from('matches')
+                    ->where('target_user_id', $authUserId)
+                    ->where('status', 'liked');
+            })
+            ->get();
+
+        return $this->respondSuccess([
+            'data' => UserSummaryResource::collection($likers)->resolve(),
+        ], 'Users who liked you fetched successfully.');
     }
 
     /**
@@ -364,13 +394,13 @@ class MatchController extends BaseApiController
                 ->first();
 
             $games = collect($commonGameIds[$candidateId] ?? [])
-                ->map(function (int $id) use ($gameById) {
+                ->map(function (int $id) use ($gameById, $request) {
                     $g = $gameById->get($id);
                     if (! $g) return null;
                     return [
                         'id' => (int) $g->id,
                         'name' => (string) $g->name,
-                        'image' => $g->image ? (string) $g->image : null,
+                        'image' => $g->image ? ApiPublicUrl::rewrite((string) $g->image, $request) : null,
                     ];
                 })
                 ->filter()
@@ -394,11 +424,15 @@ class MatchController extends BaseApiController
 
             return [
                 // Images for candidate carousel (main + gallery slots).
+                // Rewritten via ApiPublicUrl so stored dev-host URLs are served from
+                // the current production origin (matches the public-profile resource).
                 'images' => collect(UserProfilePhotoService::slotsFromUser($candidate))
                     ->pluck('url')
                     ->filter(fn ($v) => is_string($v) && trim($v) !== '')
                     ->map(fn ($v) => trim($v))
                     ->concat(collect([$candidate->first_cover, $candidate->avatar])->filter())
+                    ->map(fn ($v) => ApiPublicUrl::rewrite((string) $v, $request))
+                    ->filter(fn ($v) => is_string($v) && trim($v) !== '')
                     ->unique()
                     ->values()
                     ->all(),
@@ -408,7 +442,7 @@ class MatchController extends BaseApiController
                 'region' => $candidate->region ? (string) $candidate->region : '',
                 'gender' => $candidate->gender ? (string) $candidate->gender : '',
                 'is_online' => $candidate->isEffectivelyOnline(60),
-                'image' => $candidate->first_cover ?: $candidate->avatar,
+                'image' => ApiPublicUrl::rewrite($candidate->first_cover ?: $candidate->avatar, $request),
                 'rank_tier_id' => $tier ? (int) $tier->id : null,
                 'rank_label' => $tier ? (string) $tier->label : null,
                 'common_games' => $games,

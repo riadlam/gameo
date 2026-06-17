@@ -486,6 +486,10 @@ final class MatchFirestoreConversationService
                 return;
             }
 
+            $match->loadMissing(['gamePlatform.game:id,name']);
+            $gameName = $match->gamePlatform?->game?->name;
+            $gameName = is_string($gameName) ? trim($gameName) : '';
+
             $peerUsername = (string) ($actor->username ?? 'Player');
             $peerImageUrl = $this->peerImageUrlForFirestore($actor, $request);
 
@@ -493,6 +497,7 @@ final class MatchFirestoreConversationService
                 recipientUid: $recipientFirebaseUid,
                 peerUsername: $peerUsername,
                 peerImageUrl: $peerImageUrl,
+                gameName: $gameName,
                 request: $request,
             );
 
@@ -501,6 +506,7 @@ final class MatchFirestoreConversationService
                 recipient: $recipient,
                 peerUsername: $peerUsername,
                 peerImageUrl: $peerImageUrl,
+                gameName: $gameName,
             );
         } catch (Throwable $e) {
             Log::warning('MatchFirestoreConversation: notifyPeerOfLike failed.', [
@@ -514,6 +520,7 @@ final class MatchFirestoreConversationService
         string $recipientUid,
         string $peerUsername,
         string $peerImageUrl,
+        string $gameName = '',
         ?Request $request = null,
     ): void {
         $projectId = (string) config('services.firebase.project_id', '');
@@ -532,11 +539,16 @@ final class MatchFirestoreConversationService
             rawurlencode($projectId),
         );
 
+        $trimmedGame = trim($gameName);
+        $gameSuffix = $trimmedGame !== '' ? " on $trimmedGame" : '';
+        $description = "$peerUsername liked you$gameSuffix.";
+
         $fields = [
             'recipientUid' => ['stringValue' => $recipientUid],
             'type' => ['stringValue' => 'liked_you'],
             'title' => ['stringValue' => 'Someone liked you'],
-            'description' => ['stringValue' => "$peerUsername liked you."],
+            'description' => ['stringValue' => $description],
+            'gameName' => ['stringValue' => $trimmedGame],
             'peerUsername' => ['stringValue' => $peerUsername],
             'peerImageUrl' => ['stringValue' => $peerImageUrl],
             'isRead' => ['booleanValue' => false],
@@ -566,14 +578,17 @@ final class MatchFirestoreConversationService
         User $recipient,
         string $peerUsername,
         string $peerImageUrl,
+        string $gameName = '',
     ): void {
         $deviceToken = $recipient->fcm_token;
         if (! is_string($deviceToken) || strlen($deviceToken) < 32) {
             return;
         }
 
+        $game = trim($gameName);
+        $gameSuffix = $game !== '' ? " on $game" : '';
         $title = 'Someone liked you';
-        $description = "$peerUsername liked you.";
+        $description = "$peerUsername liked you$gameSuffix.";
         $actorFirebaseUid = trim((string) ($actor->firebase_uid ?? ''));
 
         $data = [
@@ -581,6 +596,7 @@ final class MatchFirestoreConversationService
             'title' => $title,
             'description' => $description,
             'body' => $description,
+            'gameName' => $game,
             'peerUsername' => $peerUsername,
             'peerImageUrl' => $peerImageUrl,
             'peerFirebaseUid' => $actorFirebaseUid,

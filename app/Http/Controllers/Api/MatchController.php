@@ -281,6 +281,8 @@ class MatchController extends BaseApiController
             }
         }
 
+        $totalCount = $likers->count();
+
         $data = UserSummaryResource::collection($likers)->resolve();
         foreach ($data as &$user) {
             $userId = (int) $user['id'];
@@ -289,6 +291,7 @@ class MatchController extends BaseApiController
 
         return $this->respondSuccess([
             'data' => $data,
+            'total_count' => $totalCount,
         ], 'Users who liked you fetched successfully.');
     }
 

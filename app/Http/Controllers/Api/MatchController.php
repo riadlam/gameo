@@ -256,8 +256,39 @@ class MatchController extends BaseApiController
             })
             ->get();
 
+        $browsingGameMap = [];
+        if ($likers->isNotEmpty()) {
+            $matches = MatchModel::query()
+                ->whereIn('user_id', $likers->pluck('id'))
+                ->where('target_user_id', $authUserId)
+                ->where('status', 'liked')
+                ->with('gamePlatform.game:id,name')
+                ->with('gamePlatform.platform:id,name')
+                ->orderByDesc('created_at')
+                ->get()
+                ->groupBy('user_id')
+                ->map(fn ($group) => $group->first());
+
+            foreach ($matches as $userId => $match) {
+                $gp = $match->gamePlatform;
+                if ($gp && $gp->game) {
+                    $browsingGameMap[$userId] = [
+                        'game_id' => (int) $gp->game_id,
+                        'game_name' => (string) $gp->game->name,
+                        'platform_name' => $gp->platform ? (string) $gp->platform->name : null,
+                    ];
+                }
+            }
+        }
+
+        $data = UserSummaryResource::collection($likers)->resolve();
+        foreach ($data as &$user) {
+            $userId = (int) $user['id'];
+            $user['browsing_game'] = $browsingGameMap[$userId] ?? null;
+        }
+
         return $this->respondSuccess([
-            'data' => UserSummaryResource::collection($likers)->resolve(),
+            'data' => $data,
         ], 'Users who liked you fetched successfully.');
     }
 

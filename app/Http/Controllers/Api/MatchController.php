@@ -418,7 +418,8 @@ class MatchController extends BaseApiController
             $commonGameIds,
             $commonPlatformIds,
             $platformNameById,
-            $gameById
+            $gameById,
+            $request
         ) {
             $candidateId = (int) $candidate->id;
             $tier = DB::table('user_game_ranks as ugr')

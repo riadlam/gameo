@@ -38,6 +38,7 @@ class User extends Authenticatable
         'profile_images',
         'is_onboarding',
         'is_online',
+        'is_bot',
         'last_seen',
     ];
 
@@ -65,6 +66,7 @@ class User extends Authenticatable
             'profile_images' => 'array',
             'is_onboarding' => 'boolean',
             'is_online' => 'boolean',
+            'is_bot' => 'boolean',
             'last_seen' => 'datetime',
             'fcm_token_updated_at' => 'datetime',
         ];

@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             GameSeeder::class,
             GamePlatformSeeder::class,
             GameRankTierSeeder::class,
+            BotUserSeeder::class,
         ]);
     }
 }

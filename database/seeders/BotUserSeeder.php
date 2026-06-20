@@ -113,15 +113,17 @@ class BotUserSeeder extends Seeder
                 'created_at' => Carbon::now(),
             ]);
 
-            $gp = $gamePlatforms->random();
-            UserPlatform::create([
-                'user_id' => $user->id,
-                'platform_id' => $gp->platform_id,
-                'game_platform_id' => $gp->id,
-                'username_on_platform' => $username,
-            ]);
+            foreach ($gamePlatforms as $gp) {
+                UserPlatform::create([
+                    'user_id' => $user->id,
+                    'platform_id' => $gp->platform_id,
+                    'game_platform_id' => $gp->id,
+                    'username_on_platform' => $username,
+                ]);
+            }
 
-            $this->command->info("  Created bot: {$username} ({$gender}, {$age} yrs, {$region})");
+            $platformNames = $gamePlatforms->map(fn($gp) => $gp->platform->name)->join(', ');
+            $this->command->info("  Created bot: {$username} ({$gender}, {$age} yrs, {$region}) [{$platformNames}]");
         }
     }
 

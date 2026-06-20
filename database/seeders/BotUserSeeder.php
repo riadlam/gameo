@@ -3,8 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\Game;
+use App\Models\GamePlatform;
 use App\Models\User;
 use App\Models\UserGame;
+use App\Models\UserPlatform;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -61,6 +63,14 @@ class BotUserSeeder extends Seeder
             return;
         }
 
+        $gamePlatforms = GamePlatform::where('game_id', 27)->get();
+
+        if ($gamePlatforms->isEmpty()) {
+            $this->command->warn('No game_platform entries found for game_id 27. Skipping bot seeding.');
+
+            return;
+        }
+
         $this->command->info('Seeding 5 bot users for game: ' . $game->name);
 
         for ($i = 0; $i < 5; $i++) {
@@ -101,6 +111,14 @@ class BotUserSeeder extends Seeder
                 'skill_level' => rand(1, 5),
                 'play_time_hours' => rand(10, 500),
                 'created_at' => Carbon::now(),
+            ]);
+
+            $gp = $gamePlatforms->random();
+            UserPlatform::create([
+                'user_id' => $user->id,
+                'platform_id' => $gp->platform_id,
+                'game_platform_id' => $gp->id,
+                'username_on_platform' => $username,
             ]);
 
             $this->command->info("  Created bot: {$username} ({$gender}, {$age} yrs, {$region})");
